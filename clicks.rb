@@ -15,19 +15,28 @@ end
 
 def get_uid(line)
   uid = ''
+  uid2 = ''
   begin
     start = line.rindex('uid=') + 'uid='.size
     stop = line.index('"', start) -1
     uid = line[start .. stop]
   rescue
   end
-  uid
+  # parse the sifi_uid, as we are scared
+  begin
+    start = line.index("sifi=") + "sifi=".size
+    stop = line.index(" ", start)
+    xs = line[start..stop].split(",")
+    uid2 = xs[18]
+  rescue
+  end
+  [uid, uid2]
 end
 
 
 # all user_ids that made it past the click-filtering 
 def vertica_userids
-  dd = dy2k() - 1
+  dd = dy2k() - 3 #let's be very conservatibe
   cmd = "select distinct(sifi_uid) from cost_events where clicks > 0 and dd_id >= #{dd}"
   puts cmd
   s = go_direct(cmd)
@@ -46,10 +55,9 @@ def raw_userids
   cmd = "find /data/log/ctr -name  'ctr*.gz' -mtime -2 | xargs zcat"  
   IO.popen(cmd) do |io|
     while line = io.gets
-      uid = get_uid(line)
-      if uid and uid.size > 3
-        users[uid] = true
-      end
+      r = get_uid(line)
+      #users[r[0]] = true # from cookie
+      users[r[1]] = true  # from sifi param
     end 
   end
   users
@@ -63,7 +71,7 @@ puts "--"
 
 vus = vertica_userids
 puts vus.size
-puts vus.keys[0..10].inspect
+#puts vus.keys[0..10].inspect
 
 puts "-------"
 puts "working out which userids to blacklist"
@@ -74,10 +82,13 @@ rus.keys.each do |k|
 end
 
 puts "to delete: #{to_delete.size}"
-puts to_delete[0..4].inspect
+#puts to_delete[0..4].inspect
 
 f = File.open("users_to_ban.txt", "w")
 f.puts to_delete.join("\n")
 f.close
 
 puts "result in users_to_ban.txt"
+puts "vus #{vus.size}, rus #{rus.size}"
+puts vus.keys[0..2].inspect
+puts rus.keys[0..2].inspect
